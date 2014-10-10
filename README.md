@@ -1,4 +1,4 @@
-go-popular
+Gigaom Popular Stuff
 ==========
 
 Determines popular terms/posts by taxonomy.  This adds two new widgets.
