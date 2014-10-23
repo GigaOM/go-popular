@@ -105,6 +105,86 @@ class GO_Popular
 	}// end get_popular_terms
 
 	/**
+	 * Get terms that have a higher popularity in a short time period vs a longer time period
+	 *
+	 * @param array taxonomy array of taxonomies to pull terms from
+	 * @param array args_period_short the args to pass for popularity, should be a short time period
+	 * @param array args_period_long (optional) the args to pass for popularity, should be a longer time period.
+	 *                               If omitted, it will use args_period_short with a time period that is 5 days longer
+	 */
+	public function get_emergent_terms( $taxonomy, $args_period_short, $args_period_long = NULL )
+	{
+		$cache_key = md5( serialize( array( $taxonomy, $args_period_short, $args_period_long ) ) );
+
+		if ( $emergent_terms = wp_cache_get( $cache_key, 'go-popular-emergent' ) )
+		{
+			return $emergent_terms;
+		}//end if
+
+		$emergent_terms = array();
+
+		if ( NULL === $args_period_long )
+		{
+			$args_period_long = $args_period_short;
+			$args_period_long['from'] = date( 'Y-m-d', strtotime( '-5 days', strtotime( $args_period_short['from' ] ) ) );
+		}//end if
+
+		// determine a scaling factor based on the ratio of the time period durations
+		$duration_short = $this->get_duration( $args_period_short['from'], $args_period_short['to'] );
+		$duration_long = $this->get_duration( $args_period_long['from'], $args_period_long['to'] );
+		$scaling_factor = $duration_short / $duration_long;
+
+		// we need to look at all the terms in the period to see if a term is emergent
+		$count = $args_period_short['count'] ?: -1;
+		$args_period_short['count'] = $args_period_long['count'] = -1;
+
+		// get the terms for the time periods
+		$terms_short = $this->get_popular_terms( $taxonomy, $args_period_short );
+		$terms_long = $this->get_popular_terms( $taxonomy, $args_period_long );
+
+		foreach ( $terms_short as $slug => &$term_short )
+		{
+			// emergent score is $term_short['popularity'] - ( $term_long['popularity'] * $scaling_factor )
+			$term_short->emergent_score = round( $term_short->popularity - ( $terms_long[ $slug ]->popularity * $scaling_factor ), 2 );
+
+			// anything <= 0 is steady or falling, not emergent
+			if ( $term_short->emergent_score > 0 )
+			{
+				$emergent_terms[] = $term_short;
+			}// end if
+		}// end foreach
+
+		uasort( $emergent_terms, array( $this, 'emergent_score_sort' ) );
+		if ( $count > 0 )
+		{
+			$emergent_terms = array_slice( $emergent_terms, 0, $count );
+		}// end if
+		else
+		{
+			$emergent_terms = $emergent_terms;
+		}// end else
+
+		// put this in cache for 24 hours
+		wp_cache_set( $cache_key, $emergent_terms, 'go-popular-emergent', 86400 );
+
+		return $emergent_terms;
+	}//end get_emergent_terms
+
+	/**
+	 * Utility function to easily calculate durations between two times
+	 *
+	 * @param string $from strtotime compatible time indicating the start of the duration
+	 * @param string $from strtotime compatible time indicating the end of the duration
+	 * @return int number of seconds between times
+	 */
+	private function get_duration( $from, $to )
+	{
+		$from = strtotime( $from );
+		$to = strtotime( $to );
+		return $to - $from;
+	}//end get_duration
+
+	/**
 	 * Sort function for popularity.  Higher popularity terms float to the top.
 	 */
 	public function popularity_sort( $a, $b )
@@ -116,6 +196,19 @@ class GO_Popular
 
 		return $a->popularity < $b->popularity ? 1 : -1;
 	}// end popularity_sort
+
+	/**
+	 * Sort function for emergent score.  Higher emergent scored terms float to the top.
+	 */
+	public function emergent_score_sort( $a, $b )
+	{
+		if ( $a->emergent_score == $b->emergent_score )
+		{
+			return 0;
+		}// end if
+
+		return $a->emergent_score < $b->emergent_score ? 1 : -1;
+	}// end emergent_score_sort
 
 	public function get_popular_posts_by_term( $type, $taxonomy_slug, $term_slug, $args )
 	{
