@@ -18,6 +18,7 @@
 	background: #fff;
 	border-bottom: 2px solid #f5f5f0;
 	clear: both;
+	font-size: 1rem;
 	min-height: 42px;
 	padding: .75rem 1rem .75rem 4.5rem;
 	position: relative;
@@ -70,6 +71,10 @@
 	font-size: 1rem;
 }
 
+.trending-post .trend {
+	padding: 0;
+}
+
 .trending-post .trend a {
 	font-size: 2rem;
 }
@@ -84,7 +89,6 @@
 
 .trending-post a {
 	color: #2A2E33;
-	font-size: .8125rem;
 	text-decoration: none;
 }
 
@@ -121,5 +125,9 @@
 		right: -.5rem;
 		top: 380px;
 		width: 300px;
+	}
+
+	.trending-post {
+		font-size: .8125rem;
 	}
 }
