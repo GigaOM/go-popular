@@ -110,18 +110,22 @@ class GO_Popular
 		$url = 'http://api.chartbeat.com/live/toppages/v3/';
 		$url = add_query_arg( $args, $url );
 
+		// fetch content from chartbeat
 		$response = wp_remote_get( $url );
 
+		// if the wp_remote_get failed, return a json error
 		if ( is_wp_error( $response ) )
 		{
 			wp_send_json_error();
 			die;
 		}//end if
 
+		// parse the data
 		$data = json_decode( $response['body'] );
 
 		$massaged_data = array();
 
+		// start the first post at rank 1
 		$rank = 1;
 
 		foreach ( $data->pages as $item )
@@ -176,20 +180,23 @@ class GO_Popular
 				$trend_direction = 'up';
 			}//end elseif
 
+			// get the path of the post
 			$path = str_replace( 'gigaom.com/', '/', $item->path );
 
-			$post = get_page_by_path( $path, OBJECT, 'post' );
-
-			$page = array(
-				'url' => $path,
+			// build the post
+			$post_data = array(
+				'url' => 'https://gigaom.com/' . $path,
 				'title' => preg_replace( '/ \| Gigaom$/', '', $item->title ),
 				'rank' => $rank,
 				'trend' => $trend,
 				'trend_direction' => $trend_direction,
+				'thumbnail' => esc_url( get_template_directory_uri() . '/img/logo-iphone.gigaom.png' ),
 			);
 
-			$thumbnail = esc_url( get_template_directory_uri() . '/img/logo-iphone.gigaom.png' );
+			// attempt to fetch the post
+			$post = get_page_by_path( $path, OBJECT, 'post' );
 
+			// if we can find a post by path and it has a thumbnail, use that instead
 			if ( $post && ! empty( $post->ID ) )
 			{
 				if ( has_post_thumbnail( $post->ID ) )
@@ -205,15 +212,16 @@ class GO_Popular
 
 					// point at the correct uploads directory
 					$thumbnail = preg_replace( '!src="(https?)://research\.gigaom\.com/files/!', 'src="$1://research.gigaom.com/wp-content/uploads/', $thumbnail );
+
+					$post_data['thumbnail'] = $thumbnail;
 				}//end if
 			}//end if
 
-			$page['thumbnail'] = $thumbnail;
-
-			$massaged_data[] = $page;
+			$massaged_data[] = $post_data;
 			$rank++;
 		}//end foreach
 
+		// cache the data
 		wp_cache_set( 'go-popular-trending-posts', $massaged_data );
 
 		wp_send_json_success( $massaged_data );
