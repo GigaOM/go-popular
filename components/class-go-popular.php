@@ -185,7 +185,7 @@ class GO_Popular
 				'title' => preg_replace( '/ \| Gigaom$/', '', $item->title ),
 				'rank' => $rank,
 				'trend' => $trend,
-				'trend_direction' => $trend >= .75 ? 'up' : 'down',
+				'trend_direction' => $trend_direction,
 			);
 
 			$thumbnail = esc_url( get_template_directory_uri() . '/img/logo-iphone.gigaom.png' );
