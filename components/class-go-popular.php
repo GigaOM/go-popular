@@ -94,6 +94,14 @@ class GO_Popular
 	 */
 	public function trending_posts_ajax()
 	{
+		header( 'Content-type: application/json' );
+
+		if ( $massaged_data = wp_cache_get( 'go-popular-trending-posts' ) )
+		{
+			wp_send_json_success( $massaged_data );
+			die;
+		}//end if
+
 		$args = array(
 			'apikey' => $this->config( 'chartbeat_api_key' ),
 			'host' => $this->config( 'chartbeat_host' ),
@@ -103,8 +111,6 @@ class GO_Popular
 		$url = add_query_arg( $args, $url );
 
 		$response = wp_remote_get( $url );
-
-		header( 'Content-type: application/json' );
 
 		if ( is_wp_error( $response ) )
 		{
@@ -133,22 +139,21 @@ class GO_Popular
 			// c = n times the sum of all squared x-values
 			// d = the squared sum of all x-values
 
-			$i = 1;
-
+			$x = 1;
 			$x_y_multiply = 0;
 			$sum_x = 0;
 			$sum_y = 0;
 			$sum_squared_x = 0;
 			foreach ( $item->stats->visit->hist as $hist )
 			{
-				$x_y_multiply += $i * $hist;
+				$x_y_multiply += $x * $hist;
 
-				$sum_x += $i;
+				$sum_x += $x;
 				$sum_y += $hist;
 
-				$sum_squared_x += ( $i * $i );
+				$sum_squared_x += ( $x * $x );
 
-				$i++;
+				$x++;
 			}//end foreach
 
 			$num = count( $item->stats->visit->hist );
@@ -158,6 +163,18 @@ class GO_Popular
 			$calc_d = $sum_x * $sum_x;
 
 			$trend = ( $calc_a - $calc_b ) / ( $calc_c - $calc_d );
+			if ( $trend < 0 )
+			{
+				$trend_direction = 'down';
+			}//end if
+			elseif ( $trend >= 0 && $trend <= 0.5 )
+			{
+				$trend_direction = 'dash';
+			}//end elseif
+			elseif ( $trend > 0.5 )
+			{
+				$trend_direction = 'up';
+			}//end elseif
 
 			$path = str_replace( 'gigaom.com/', '/', $item->path );
 
@@ -196,6 +213,8 @@ class GO_Popular
 			$massaged_data[] = $page;
 			$rank++;
 		}//end foreach
+
+		wp_cache_set( 'go-popular-trending-posts', $massaged_data );
 
 		wp_send_json_success( $massaged_data );
 		die;

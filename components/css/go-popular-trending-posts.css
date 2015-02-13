@@ -1,6 +1,8 @@
 .widget-go-popular-trending {
 	background: transparent;
+	border-radius: 6px;
 	box-shadow: 3px 3px 10px 0px rgba(0, 0, 0, 0.0980392);
+	margin-bottom: 1.5rem;
 }
 
 .widget-go-popular-trending > header {
@@ -16,7 +18,7 @@
 	background: #fff;
 	border-bottom: 2px solid #f5f5f0;
 	clear: both;
-	height: 66px;
+	min-height: 42px;
 	padding: .75rem 1rem .75rem 4.5rem;
 	position: relative;
 }
@@ -98,6 +100,14 @@
 
 .widget-go-popular-trending.show-thumbnails .thumb {
 	display: block;
+}
+
+.widget-go-popular-trending.show-thumbnails .trending-post {
+	height: 66px;
+}
+
+.widget-go-popular-trending.show-thumbnails > header {
+	padding-left: 1rem;
 }
 
 .widget-go-popular-trending.show-trend .trend {
