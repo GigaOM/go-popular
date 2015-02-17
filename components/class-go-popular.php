@@ -2,13 +2,51 @@
 
 class GO_Popular
 {
+	private $config = NULL;
+
 	/**
 	 * constructor, of course
 	 */
 	public function __construct()
 	{
+		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'widgets_init', array( $this, 'widgets_init' ) );
+
+		add_action( 'wp_ajax_go_popular_trending_posts', array( $this, 'trending_posts_ajax' ) );
+		add_action( 'wp_ajax_nopriv_go_popular_trending_posts', array( $this, 'trending_posts_ajax' ) );
 	}//end __construct
+
+	/**
+	 * Hooked to the init action
+	 */
+	public function init()
+	{
+		if ( function_exists( 'go_ui' ) )
+		{
+			go_ui();
+		}//end if
+
+		$script_config = apply_filters( 'go_config', array( 'version' => 1 ), 'go-script-version' );
+		$js_min = ( defined( 'GO_DEV' ) && GO_DEV ) ? 'lib' : 'min';
+
+		wp_register_script(
+			'go-popular-trending-posts',
+			plugins_url( "/js/{$js_min}/go-popular-trending-posts.js", __FILE__ ),
+			array(
+				'jquery',
+				'handlebars',
+			),
+			$script_config['version'],
+			TRUE
+		);
+
+		wp_register_style(
+			'go-popular-trending-posts',
+			plugins_url( '/css/go-popular-trending-posts.css', __FILE__ ),
+			array(),
+			$script_config['version']
+		);
+	}//end init
 
 	/**
 	 * Hooks into the widgets_init action to initialize plugin widgets
@@ -20,7 +58,175 @@ class GO_Popular
 
 		require_once __DIR__ . '/class-go-popular-terms-widget.php';
 		register_widget( 'GO_Popular_Terms_Widget' );
+
+		require_once __DIR__ . '/class-go-popular-trending-posts-widget.php';
+		register_widget( 'GO_Popular_Trending_Posts_Widget' );
 	}//end widgets_init
+
+	/**
+	 * returns our current configuration, or a value in the configuration.
+	 *
+	 * @param string $key (optional) key to a configuration value
+	 * @return mixed Returns the config array, or a config value if
+	 *  $key is not NULL
+	 */
+	public function config( $key = NULL )
+	{
+		if ( empty( $this->config ) )
+		{
+			$this->config = apply_filters(
+				'go_config',
+				array(),
+				'go-popular'
+			);
+		}//END if
+
+		if ( ! empty( $key ) )
+		{
+			return isset( $this->config[ $key ] ) ? $this->config[ $key ] : NULL ;
+		}
+
+		return $this->config;
+	}//END config
+
+	/**
+	 * Hooked to the trending_posts_ajax action
+	 */
+	public function trending_posts_ajax()
+	{
+		header( 'Content-type: application/json' );
+
+		if ( $massaged_data = wp_cache_get( 'go-popular-trending-posts' ) )
+		{
+			wp_send_json_success( $massaged_data );
+			die;
+		}//end if
+
+		$args = array(
+			'apikey' => $this->config( 'chartbeat_api_key' ),
+			'host' => $this->config( 'chartbeat_host' ),
+		);
+
+		$url = 'http://api.chartbeat.com/live/toppages/v3/';
+		$url = add_query_arg( $args, $url );
+
+		// fetch content from chartbeat
+		$response = wp_remote_get( $url );
+
+		// if the wp_remote_get failed, return a json error
+		if ( is_wp_error( $response ) )
+		{
+			wp_send_json_error();
+			die;
+		}//end if
+
+		// parse the data
+		$data = json_decode( $response['body'] );
+
+		$massaged_data = array();
+
+		// start the first post at rank 1
+		$rank = 1;
+
+		foreach ( $data->pages as $item )
+		{
+			if ( 'gigaom.com/' === $item->path )
+			{
+				continue;
+			}//end if
+
+			// formula for a trend line
+			// m = ( a - b ) / ( c - d )
+			// where:
+			// a = n times ( all x-values multiplied by their corresponding y-values )
+			// b = the sum of all x-values times the sum of all y-values
+			// c = n times the sum of all squared x-values
+			// d = the squared sum of all x-values
+
+			$x = 1;
+			$x_y_multiply = 0;
+			$sum_x = 0;
+			$sum_y = 0;
+			$sum_squared_x = 0;
+			foreach ( $item->stats->visit->hist as $hist )
+			{
+				$x_y_multiply += $x * $hist;
+
+				$sum_x += $x;
+				$sum_y += $hist;
+
+				$sum_squared_x += ( $x * $x );
+
+				$x++;
+			}//end foreach
+
+			$num = count( $item->stats->visit->hist );
+			$calc_a = $x_y_multiply * $num;
+			$calc_b = $sum_x * $sum_y;
+			$calc_c = $num * $sum_squared_x;
+			$calc_d = $sum_x * $sum_x;
+
+			$trend = ( $calc_a - $calc_b ) / ( $calc_c - $calc_d );
+			if ( $trend < 0 )
+			{
+				$trend_direction = 'down';
+			}//end if
+			elseif ( $trend >= 0 && $trend <= 0.5 )
+			{
+				$trend_direction = 'dash';
+			}//end elseif
+			elseif ( $trend > 0.5 )
+			{
+				$trend_direction = 'up';
+			}//end elseif
+
+			// get the path of the post
+			$path = str_replace( 'gigaom.com/', '/', $item->path );
+
+			// build the post
+			$post_data = array(
+				'url' => 'https://gigaom.com/' . $path,
+				'title' => preg_replace( '/ \| Gigaom$/', '', $item->title ),
+				'rank' => $rank,
+				'trend' => $trend,
+				'trend_direction' => $trend_direction,
+				'thumbnail' => esc_url( get_template_directory_uri() . '/img/logo-iphone.gigaom.png' ),
+			);
+
+			// attempt to fetch the post
+			$post = get_page_by_path( $path, OBJECT, 'post' );
+
+			// if we can find a post by path and it has a thumbnail, use that instead
+			if ( $post && ! empty( $post->ID ) )
+			{
+				if ( has_post_thumbnail( $post->ID ) )
+				{
+					$thumbnail = get_the_post_thumbnail( $post->ID, 'small-square-thumbnail' );
+
+					preg_match( '!src="([^"]+)"!', $thumbnail, $matches );
+
+					$thumbnail = $matches[1];
+
+					// let's make sure old images are pointing at the correct location
+					$thumbnail = preg_replace( '!src="(https?)://pro\.!', 'src="$1://research.', $thumbnail );
+
+					// point at the correct uploads directory
+					$thumbnail = preg_replace( '!src="(https?)://research\.gigaom\.com/files/!', 'src="$1://research.gigaom.com/wp-content/uploads/', $thumbnail );
+
+					$post_data['thumbnail'] = $thumbnail;
+				}//end if
+			}//end if
+
+			$massaged_data[] = $post_data;
+			$rank++;
+		}//end foreach
+
+		// cache the data
+		wp_cache_set( 'go-popular-trending-posts', $massaged_data );
+
+		wp_send_json_success( $massaged_data );
+		die;
+	}//end trending_posts_ajax
 
 	/**
 	 * Get the popular term
