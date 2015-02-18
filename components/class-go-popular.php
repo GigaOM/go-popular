@@ -12,8 +12,8 @@ class GO_Popular
 		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'widgets_init', array( $this, 'widgets_init' ) );
 
-		add_action( 'wp_ajax_go_popular_trending_posts', array( $this, 'trending_posts_ajax' ) );
-		add_action( 'wp_ajax_nopriv_go_popular_trending_posts', array( $this, 'trending_posts_ajax' ) );
+		// hook to template_redirect so we can handle the endpoint
+		add_action( 'template_redirect', array( $this, 'template_redirect' ) );
 	}//end __construct
 
 	/**
@@ -21,6 +21,9 @@ class GO_Popular
 	 */
 	public function init()
 	{
+		// create an endpoint
+		add_rewrite_endpoint( 'go-popular-trending-posts', EP_ROOT );
+
 		if ( function_exists( 'go_ui' ) )
 		{
 			go_ui();
@@ -47,6 +50,21 @@ class GO_Popular
 			$script_config['version']
 		);
 	}//end init
+
+	/**
+	 * Hooked to the template_redirect action
+	 */
+	public function template_redirect()
+	{
+		global $wp_query;
+
+		if ( empty( $wp_query->query['go-popular-trending-posts'] ) )
+		{
+			return;
+		}//end if
+
+		$this->trending_posts_json();
+	}//end template_redirect
 
 	/**
 	 * Hooks into the widgets_init action to initialize plugin widgets
@@ -92,14 +110,13 @@ class GO_Popular
 	/**
 	 * Hooked to the trending_posts_ajax action
 	 */
-	public function trending_posts_ajax()
+	public function trending_posts_json()
 	{
 		header( 'Content-type: application/json' );
 
 		if ( $massaged_data = wp_cache_get( 'go-popular-trending-posts' ) )
 		{
 			wp_send_json_success( $massaged_data );
-			die;
 		}//end if
 
 		$args = array(
@@ -117,7 +134,6 @@ class GO_Popular
 		if ( is_wp_error( $response ) )
 		{
 			wp_send_json_error();
-			die;
 		}//end if
 
 		// parse the data
@@ -225,8 +241,7 @@ class GO_Popular
 		wp_cache_set( 'go-popular-trending-posts', $massaged_data, '', MINUTE_IN_SECONDS * 5 );
 
 		wp_send_json_success( $massaged_data );
-		die;
-	}//end trending_posts_ajax
+	}//end trending_posts_json
 
 	/**
 	 * Get the popular term
