@@ -29,7 +29,7 @@ class GO_Popular_Trending_Posts_Widget extends WP_Widget
 			'go-popular-trending-posts',
 			'go_popular_trending_posts',
 			array(
-				'endpoint' => home_url( 'wp-admin/admin-ajax.php?action=go_popular_trending_posts' ),
+				'endpoint' => home_url( 'go-popular-trending-posts/' . mktime( date( 'H' ), date( 'i' ), 0 ) . '/' ),
 				'chartbeat_api_key' => go_popular()->config( 'chartbeat_api_key' ),
 			)
 		);
