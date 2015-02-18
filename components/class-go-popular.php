@@ -222,7 +222,7 @@ class GO_Popular
 		}//end foreach
 
 		// cache the data
-		wp_cache_set( 'go-popular-trending-posts', $massaged_data );
+		wp_cache_set( 'go-popular-trending-posts', $massaged_data, '', MINUTE_IN_SECONDS * 5 );
 
 		wp_send_json_success( $massaged_data );
 		die;
